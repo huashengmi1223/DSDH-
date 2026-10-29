@@ -1,26 +1,35 @@
-import os
-
+"""删除全白图片；忽略隐藏文件，支持任意图片尺寸。"""
+import argparse
+from pathlib import Path
 import numpy as np
-import tensorflow as tf
+from PIL import Image
 from tqdm import tqdm
 
+BASE_DIR = Path(__file__).resolve().parent
 
-def clean_blank():
-    # 解决全白图片的方案：
-    blank_img_array = [255] * np.ones((30, 30, 3))  # 创建一个空白图片矩阵
-    img_dir = "data"  # 设置待清除空白图片的文件夹路径
-    for each_cls in tqdm(os.listdir(img_dir), desc='正在清除空白图片'):
-        dir_path = os.path.join(img_dir, each_cls)
-        for each_img in os.listdir(dir_path):
-            image_path = os.path.join(dir_path, each_img)
-            # 加载图片，并将图片转成ndarray类型
-            img_array = tf.keras.preprocessing.image.img_to_array(tf.keras.preprocessing.image.load_img(image_path))
-            # 判断每张图片是否是空白图片，若是，则删除。
-            if (blank_img_array == img_array).all():
-                os.remove(image_path)
-            else:
+
+def clean_blank(img_dir=BASE_DIR / "data"):
+    img_dir = Path(img_dir)
+    if not img_dir.is_dir():
+        raise FileNotFoundError(f"未找到 {img_dir}，请先运行 TTF2IMG.py")
+    removed = 0
+    folders = sorted(p for p in img_dir.iterdir() if p.is_dir() and not p.name.startswith("."))
+    for folder in tqdm(folders, desc="正在清除空白图片"):
+        for path in folder.iterdir():
+            if path.suffix.lower() not in {".png", ".jpg", ".jpeg", ".bmp"}:
                 continue
+            with Image.open(path) as image:
+                blank = np.all(np.asarray(image.convert("RGB")) == 255)
+            if blank:
+                path.unlink()
+                removed += 1
+        if not any(folder.iterdir()):
+            folder.rmdir()
+    print(f"清理完成：删除 {removed} 张全白图片")
+    return removed
 
 
-if __name__ == '__main__':
-    clean_blank()
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--data-dir", type=Path, default=BASE_DIR / "data")
+    clean_blank(parser.parse_args().data_dir)
